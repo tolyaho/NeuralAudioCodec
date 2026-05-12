@@ -1,0 +1,167 @@
+"""Evaluate SoundStream checkpoints on LibriSpeech test-clean."""
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+import soundfile as sf
+import torch
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from src.datasets.librispeech_codec import LibriSpeechCodecDataset
+from src.model.soundstream import SoundStream
+
+
+def build_metrics(sample_rate: int, device: torch.device):
+    # STOI is not re-exported from torchmetrics.audio unless pystoi is installed.
+    from torchmetrics.audio.nisqa import NonIntrusiveSpeechQualityAssessment
+    from torchmetrics.audio.stoi import ShortTimeObjectiveIntelligibility
+
+    stoi_metric = ShortTimeObjectiveIntelligibility(
+        fs=sample_rate,
+        extended=False,
+    ).to(device)
+
+    nisqa_metric = NonIntrusiveSpeechQualityAssessment(
+        fs=sample_rate,
+    ).to(device)
+
+    return stoi_metric, nisqa_metric
+
+
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser()
+
+    p.add_argument("--checkpoint", type=str, required=True)
+    p.add_argument("--manifest", type=str, default="data/manifests/test-clean.jsonl")
+    p.add_argument("--output-dir", type=str, default="reports/eval")
+    p.add_argument("--sample-rate", type=int, default=16000)
+    p.add_argument("--batch-size", type=int, default=1)
+    p.add_argument("--num-workers", type=int, default=0)
+    p.add_argument("--limit", type=int, default=None)
+    p.add_argument("--save-audio", type=int, default=10)
+
+    p.add_argument("--base-channels", type=int, default=32)
+    p.add_argument("--latent-dim", type=int, default=512)
+    p.add_argument("--codebook-size", type=int, default=1024)
+    p.add_argument("--num-quantizers", type=int, default=8)
+
+    p.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
+
+    return p.parse_args()
+
+
+def sync_ema_buffers(model: SoundStream) -> None:
+    for vq in model.quantizer.quantizers:
+        vq.ema_cluster_sum.data.copy_(vq.codebook.weight.data)
+        vq.ema_cluster_size.fill_(1.0)
+
+
+def load_codec(path: Path, model: SoundStream, device: torch.device) -> dict:
+    ckpt = torch.load(path, map_location=device)
+
+    if "model" in ckpt:
+        state = ckpt["model"]
+    elif "codec" in ckpt:
+        state = ckpt["codec"]
+    else:
+        state = ckpt
+
+    missing, _ = model.load_state_dict(state, strict=False)
+    if any("ema_" in k for k in missing):
+        sync_ema_buffers(model)
+
+    return ckpt if isinstance(ckpt, dict) else {}
+
+
+def main() -> None:
+    args = parse_args()
+
+    device = torch.device(args.device)
+    output_dir = ROOT / args.output_dir / Path(args.checkpoint).parent.name
+    audio_dir = output_dir / "audio"
+    audio_dir.mkdir(parents=True, exist_ok=True)
+
+    dataset = LibriSpeechCodecDataset(
+        manifest_path=ROOT / args.manifest,
+        root=ROOT,
+        sample_rate=args.sample_rate,
+        train=False,
+    )
+
+    loader = DataLoader(
+        dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.num_workers,
+    )
+
+    model = SoundStream(
+        in_channels=1,
+        base_channels=args.base_channels,
+        latent_dim=args.latent_dim,
+        codebook_size=args.codebook_size,
+        num_quantizers=args.num_quantizers,
+    ).to(device)
+
+    ckpt = load_codec(ROOT / args.checkpoint, model, device)
+    model.eval()
+
+    stoi_metric, nisqa_metric = build_metrics(args.sample_rate, device)
+
+    stoi_values = []
+    nisqa_values = []
+
+    with torch.no_grad():
+        for i, batch in enumerate(tqdm(loader, desc="evaluating")):
+            if args.limit is not None and i >= args.limit:
+                break
+
+            audio = batch["audio"].to(device)
+
+            out = model(audio)
+            rec = out["reconstruction"].clamp(-1.0, 1.0)
+
+            target = audio.squeeze(1)
+            pred = rec.squeeze(1)
+
+            stoi = stoi_metric(pred, target)
+            nisqa = nisqa_metric(pred)
+
+            stoi_values.append(float(stoi.detach().cpu()))
+            nisqa_values.append(float(nisqa[0].detach().cpu()))
+
+            if i < args.save_audio:
+                utt_id = batch["utt_id"][0]
+
+                original = target[0].detach().cpu().numpy()
+                reconstructed = pred[0].detach().cpu().numpy()
+
+                sf.write(audio_dir / f"{i:03d}_{utt_id}_original.wav", original, args.sample_rate)
+                sf.write(audio_dir / f"{i:03d}_{utt_id}_reconstruction.wav", reconstructed, args.sample_rate)
+
+    results = {
+        "checkpoint": args.checkpoint,
+        "checkpoint_step": ckpt.get("step"),
+        "num_samples": len(stoi_values),
+        "stoi_mean": sum(stoi_values) / len(stoi_values),
+        "nisqa_mean": sum(nisqa_values) / len(nisqa_values),
+        "stoi_values": stoi_values,
+        "nisqa_values": nisqa_values,
+    }
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    with (output_dir / "metrics.json").open("w", encoding="utf-8") as f:
+        json.dump(results, f, indent=2)
+
+    print(json.dumps({k: v for k, v in results.items() if not k.endswith("_values")}, indent=2))
+
+
+if __name__ == "__main__":
+    main()

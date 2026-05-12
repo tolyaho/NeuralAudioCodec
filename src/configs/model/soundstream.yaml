@@ -1,0 +1,11 @@
+_target_: src.model.SoundStream
+in_channels: 1
+base_channels: 32
+latent_dim: 512
+strides:
+  - 2
+  - 4
+  - 5
+  - 5
+codebook_size: 1024
+num_quantizers: 8

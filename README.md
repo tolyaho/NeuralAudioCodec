@@ -1,4 +1,4 @@
-# PyTorch Template for DL projects
+# Neural Audio Codec
 
 <p align="center">
   <a href="#about">About</a> •
@@ -10,6 +10,14 @@
   <a href="#credits">Credits</a> •
   <a href="#license">License</a>
 </p>
+
+This repository contains a SoundStream-style neural audio codec implementation for the homework, kept inside the required PyTorch project template structure. The original template entrypoints (`train.py`, `inference.py`, `src/configs`, `src/trainer`, etc.) are preserved; the completed codec pipeline is in `scripts/` and the template namespaces under `src/`.
+
+For the concise project instructions, training commands, evaluation commands, and final metrics, see [`README_SOUNDSTREAM.md`](README_SOUNDSTREAM.md).
+
+Final checkpoint reference: `checkpoints/20260507_082649_gan_scratch_ema_disc15k_fm5/final.pt`.
+
+Final full-test metrics: STOI `0.9409373478580068`, NISQA `2.3272093147039414`.
 
 <p align="center">
 <a href="https://github.com/Blinorot/pytorch_project_template/generate">

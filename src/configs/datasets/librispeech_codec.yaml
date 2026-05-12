@@ -1,0 +1,14 @@
+train:
+  _target_: src.datasets.LibriSpeechCodecDataset
+  manifest_path: data/manifests/train-clean-100.jsonl
+  root: .
+  sample_rate: 16000
+  crop_seconds: 0.5
+  train: true
+test:
+  _target_: src.datasets.LibriSpeechCodecDataset
+  manifest_path: data/manifests/test-clean.jsonl
+  root: .
+  sample_rate: 16000
+  crop_seconds: 0.5
+  train: false

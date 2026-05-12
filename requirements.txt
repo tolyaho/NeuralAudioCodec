@@ -1,13 +1,18 @@
-torch==2.2.0
-torchvision==0.17.0
+torch
+torchaudio
 torchmetrics
-numpy==1.26.4
+pystoi
+numpy
+scipy
+soundfile
+librosa
 tqdm
 matplotlib
 pandas
 wandb
 comet_ml
 hydra-core
+PyYAML
 
 black
 isort
