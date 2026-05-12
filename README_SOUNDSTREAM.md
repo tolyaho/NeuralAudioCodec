@@ -46,6 +46,13 @@ export COMET_API_KEY="..."
 export COMET_WORKSPACE="..."
 ```
 
+Hydra can be annoying with commas. If I pass a description with commas, I use
+inner quotes like this:
+
+```bash
+'run_description="Final scratch run with EMA RVQ, delayed STFT/waveform GAN, hinge loss, and feature matching."'
+```
+
 ## Runs
 
 First I trained the reconstruction-only codec:
@@ -62,7 +69,7 @@ python scripts/train.py \
   warmup_steps=1000 \
   lr=1e-4 \
   run_name=rec_only_mel_45k_logfix_warmup \
-  'tag=[reconstruction,baseline,mel-loss,rvq,45k]'
+  tag='[reconstruction,baseline,mel-loss,rvq,45k]'
 ```
 
 I also tried a two-stage STFT-GAN from the reconstruction checkpoint:
@@ -85,7 +92,7 @@ python scripts/train_gan.py \
   adv_weight=0.03 \
   feat_weight=3.0 \
   run_name=gan_stft_soft_45k_from_rec45k \
-  'tag=[gan,two-stage,stft-discriminator,feature-matching,45k]'
+  tag='[gan,two-stage,stft-discriminator,feature-matching,45k]'
 ```
 
 The final run was trained from scratch. Discriminator starts late; wave
@@ -112,7 +119,7 @@ python scripts/train_gan.py \
   adv_weight=0.03 \
   feat_weight=3.0 \
   run_name=gan_scratch_ema_disc20k_wave8_fm3_45k \
-  'tag=[gan,scratch,final,ema-rvq,stft-discriminator,waveform-discriminator,45k]'
+  tag='[gan,scratch,final,ema-rvq,stft-discriminator,waveform-discriminator,45k]'
 ```
 
 ## Evaluation
