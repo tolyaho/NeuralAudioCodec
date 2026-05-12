@@ -1,1 +1,1 @@
-from src.metrics.example import ExampleMetric
+__all__ = []

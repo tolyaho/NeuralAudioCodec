@@ -1,258 +1,149 @@
-from datetime import datetime
+from __future__ import annotations
 
-import numpy as np
-import pandas as pd
+from datetime import datetime
+from pathlib import Path
+from typing import Any
 
 
 class CometMLWriter:
-    """
-    Class for experiment tracking via CometML.
-
-    See https://www.comet.com/docs/v2/.
-    """
+    """Small Comet adapter used by the training scripts."""
 
     def __init__(
         self,
-        logger,
-        project_config,
-        project_name,
-        workspace=None,
-        run_id=None,
-        run_name=None,
-        mode="online",
+        project_name: str,
+        project_config: dict | None = None,
+        workspace: str | None = None,
+        run_name: str | None = None,
+        api_key: str | None = None,
+        mode: str = "online",
         **kwargs,
-    ):
-        """
-        API key is expected to be provided by the user in the terminal.
-
-        Args:
-            logger (Logger): logger that logs output.
-            project_config (dict): config for the current experiment.
-            project_name (str): name of the project inside experiment tracker.
-            workspace (str | None): name of the workspace inside experiment
-                tracker. Used if you work in a team.
-            run_id (str | None): the id of the current run.
-            run_name (str | None): the name of the run. If None, random name
-                is given.
-            mode (str): if online, log data to the remote server. If
-                offline, log locally.
-        """
-        try:
-            import comet_ml
-
-            comet_ml.login()
-
-            self.run_id = run_id
-
-            resume = False
-            if project_config["trainer"].get("resume_from") is not None:
-                resume = True
-
-            if resume:
-                if mode == "offline":
-                    exp_class = comet_ml.ExistingOfflineExperiment
-                else:
-                    exp_class = comet_ml.ExistingExperiment
-
-                self.exp = exp_class(experiment_key=self.run_id)
-            else:
-                if mode == "offline":
-                    exp_class = comet_ml.OfflineExperiment
-                else:
-                    exp_class = comet_ml.Experiment
-
-                self.exp = exp_class(
-                    project_name=project_name,
-                    workspace=workspace,
-                    experiment_key=self.run_id,
-                    log_code=kwargs.get("log_code", False),
-                    log_graph=kwargs.get("log_graph", False),
-                    auto_metric_logging=kwargs.get("auto_metric_logging", False),
-                    auto_param_logging=kwargs.get("auto_param_logging", False),
-                )
-                self.exp.set_name(run_name)
-                self.exp.log_parameters(parameters=project_config)
-
-            self.comel_ml = comet_ml
-
-        except ImportError:
-            logger.warning("For use comet_ml install it via \n\t pip install comet_ml")
-
+    ) -> None:
         self.step = 0
-        # the mode is usually equal to the current partition name
-        # used to separate Partition1 and Partition2 metrics
         self.mode = ""
         self.timer = datetime.now()
+        self.disabled = mode in {"disabled", "off", "none"}
+        self.exp = None
 
-    def set_step(self, step, mode="train"):
-        """
-        Define current step and mode for the tracker.
+        if self.disabled:
+            return
 
-        Calculates the difference between method calls to monitor
-        training/evaluation speed.
+        try:
+            import comet_ml
+        except ImportError as exc:
+            raise RuntimeError("Install comet_ml or set use_comet=false") from exc
 
-        Args:
-            step (int): current step.
-            mode (str): current mode (partition name).
-        """
-        self.mode = mode
+        exp_class = comet_ml.OfflineExperiment if mode == "offline" else comet_ml.Experiment
+        exp_kwargs = {
+            "project_name": project_name,
+            "workspace": workspace,
+            "auto_metric_logging": kwargs.get("auto_metric_logging", False),
+            "auto_param_logging": kwargs.get("auto_param_logging", False),
+        }
+        if api_key:
+            exp_kwargs["api_key"] = api_key
+
+        self.exp = exp_class(**exp_kwargs)
+        if run_name:
+            self.exp.set_name(run_name)
+        if project_config:
+            self.exp.log_parameters(project_config)
+
+    def _name(self, name: str) -> str:
+        return f"{name}_{self.mode}" if self.mode else name
+
+    def set_step(self, step: int, mode: str = "train") -> None:
         previous_step = self.step
         self.step = step
+        self.mode = mode
+
         if step == 0:
             self.timer = datetime.now()
-        else:
-            duration = datetime.now() - self.timer
-            self.add_scalar(
-                "steps_per_sec", (self.step - previous_step) / duration.total_seconds()
+            return
+
+        duration = (datetime.now() - self.timer).total_seconds()
+        if duration > 0 and step != previous_step:
+            self.add_scalar("steps_per_sec", (step - previous_step) / duration)
+        self.timer = datetime.now()
+
+    def log_parameters(self, params: dict) -> None:
+        if self.exp is not None:
+            self.exp.log_parameters(params)
+
+    def log_metrics(self, metrics: dict, step: int | None = None) -> None:
+        if self.exp is not None:
+            self.exp.log_metrics(metrics, step=self.step if step is None else step)
+
+    def log_audio(
+        self,
+        audio_data,
+        sample_rate: int,
+        file_name: str,
+        step: int | None = None,
+    ) -> None:
+        if self.exp is not None:
+            self.exp.log_audio(
+                audio_data=audio_data,
+                sample_rate=sample_rate,
+                file_name=file_name,
+                step=self.step if step is None else step,
             )
-            self.timer = datetime.now()
 
-    def _object_name(self, object_name):
-        """
-        Update object_name (scalar, image, etc.) with the
-        current mode (partition name). Used to separate metrics
-        from different partitions.
+    def log_model(self, name: str, path: str | Path) -> None:
+        if self.exp is not None:
+            self.exp.log_model(name=name, file_or_folder=str(path), overwrite=True)
 
-        Args:
-            object_name (str): current object name.
-        Returns:
-            object_name (str): updated object name.
-        """
-        return f"{object_name}_{self.mode}"
+    def log_other(self, key: str, value: Any) -> None:
+        if self.exp is not None:
+            self.exp.log_other(key, value)
 
-    def add_checkpoint(self, checkpoint_path, save_dir):
-        """
-        Log checkpoints to the experiment tracker.
+    def add_tag(self, tag: str) -> None:
+        if self.exp is not None:
+            self.exp.add_tag(tag)
 
-        The checkpoints will be available in the Assets & Artifacts section
-        inside the models/checkpoints directory.
+    def end(self) -> None:
+        if self.exp is not None:
+            self.exp.end()
 
-        Args:
-            checkpoint_path (str): path to the checkpoint file.
-            save_dir (str): path to the dir, where checkpoint is saved.
-        """
-        # For comet, save dir is not required
-        # It is kept for consistency with WandB
-        self.exp.log_model(
-            name="checkpoints", file_or_folder=checkpoint_path, overwrite=True
-        )
+    def add_checkpoint(self, checkpoint_path, save_dir=None) -> None:
+        self.log_model("checkpoints", checkpoint_path)
 
-    def add_scalar(self, scalar_name, scalar):
-        """
-        Log a scalar to the experiment tracker.
+    def add_scalar(self, scalar_name: str, scalar) -> None:
+        self.log_metrics({self._name(scalar_name): scalar})
 
-        Args:
-            scalar_name (str): name of the scalar to use in the tracker.
-            scalar (float): value of the scalar.
-        """
-        self.exp.log_metrics(
-            {
-                self._object_name(scalar_name): scalar,
-            },
-            step=self.step,
-        )
+    def add_scalars(self, scalars: dict) -> None:
+        self.log_metrics({self._name(name): value for name, value in scalars.items()})
 
-    def add_scalars(self, scalars):
-        """
-        Log several scalars to the experiment tracker.
+    def add_image(self, image_name: str, image) -> None:
+        if self.exp is not None:
+            self.exp.log_image(image_data=image, name=self._name(image_name), step=self.step)
 
-        Args:
-            scalars (dict): dict, containing scalar name and value.
-        """
-        self.exp.log_metrics(
-            {
-                self._object_name(scalar_name): scalar
-                for scalar_name, scalar in scalars.items()
-            },
-            step=self.step,
-        )
+    def add_images(self, image_names, images) -> None:
+        for name, image in zip(image_names, images):
+            self.add_image(name, image)
 
-    def add_image(self, image_name, image):
-        """
-        Log an image to the experiment tracker.
+    def add_audio(self, audio_name: str, audio, sample_rate: int | None = None) -> None:
+        if hasattr(audio, "detach"):
+            audio = audio.detach().cpu().numpy()
+        self.log_audio(audio, sample_rate=sample_rate, file_name=self._name(audio_name))
 
-        Args:
-            image_name (str): name of the image to use in the tracker.
-            image (Path | Tensor | ndarray | list[tuple] | Image): image
-                in the CometML-friendly format.
-        """
-        self.exp.log_image(
-            image_data=image, name=self._object_name(image_name), step=self.step
-        )
+    def add_text(self, text_name: str, text: str) -> None:
+        if self.exp is not None:
+            self.exp.log_text(text=text, step=self.step, metadata={"name": self._name(text_name)})
 
-    def add_audio(self, audio_name, audio, sample_rate=None):
-        """
-        Log an audio to the experiment tracker.
+    def add_histogram(self, hist_name: str, values_for_hist, bins=None) -> None:
+        if self.exp is not None:
+            if hasattr(values_for_hist, "detach"):
+                values_for_hist = values_for_hist.detach().cpu().numpy()
+            self.exp.log_histogram_3d(values=values_for_hist, name=self._name(hist_name), step=self.step)
 
-        Args:
-            audio_name (str): name of the audio to use in the tracker.
-            audio (Path | ndarray): audio in the CometML-friendly format.
-            sample_rate (int): audio sample rate.
-        """
-        audio = audio.detach().cpu().numpy().T
-        self.exp.log_audio(
-            file_name=self._object_name(audio_name),
-            audio_data=audio,
-            sample_rate=sample_rate,
-            step=self.step,
-        )
+    def add_table(self, table_name: str, table) -> None:
+        if self.exp is not None:
+            self.exp.log_table(filename=self._name(table_name) + ".csv", tabular_data=table, headers=True)
 
-    def add_text(self, text_name, text):
-        """
-        Log text to the experiment tracker.
+    def add_pr_curve(self, curve_name: str, curve) -> None:
+        if self.exp is not None:
+            self.exp.log_other(self._name(curve_name), curve)
 
-        Args:
-            text_name (str): name of the text to use in the tracker.
-            text (str): text content.
-        """
-        self.exp.log_text(
-            text=text, step=self.step, metadata={"name": self._object_name(text_name)}
-        )
-
-    def add_histogram(self, hist_name, values_for_hist, bins=None):
-        """
-        Log histogram to the experiment tracker.
-
-        Args:
-            hist_name (str): name of the histogram to use in the tracker.
-            values_for_hist (Tensor): array of values to calculate
-                histogram of.
-            bins (int | str): the definition of bins for the histogram.
-        """
-        # For comet, bins argument is not required
-        # It is kept for consistency with WandB
-
-        values_for_hist = values_for_hist.detach().cpu().numpy()
-
-        # np_hist = np.histogram(values_for_hist, bins=bins)
-        # if np_hist[0].shape[0] > 512:
-        #     np_hist = np.histogram(values_for_hist, bins=512)
-
-        self.exp.log_histogram_3d(
-            values=values_for_hist, name=self._object_name(hist_name), step=self.step
-        )
-
-    def add_table(self, table_name, table: pd.DataFrame):
-        """
-        Log table to the experiment tracker.
-
-        Args:
-            table_name (str): name of the table to use in the tracker.
-            table (DataFrame): table content.
-        """
-        self.exp.set_step(self.step)
-        # log_table does not support step directly
-        self.exp.log_table(
-            filename=self._object_name(table_name) + ".csv",
-            tabular_data=table,
-            headers=True,
-        )
-
-    def add_images(self, image_names, images):
-        raise NotImplementedError()
-
-    def add_pr_curve(self, curve_name, curve):
-        raise NotImplementedError()
-
-    def add_embedding(self, embedding_name, embedding):
-        raise NotImplementedError()
+    def add_embedding(self, embedding_name: str, embedding) -> None:
+        if self.exp is not None:
+            self.exp.log_other(self._name(embedding_name), str(embedding))

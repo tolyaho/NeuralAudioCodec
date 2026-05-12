@@ -1,0 +1,28 @@
+manifest: data/manifests/train-clean-100.jsonl
+batch_size: 12
+num_workers: 2
+steps: 45000
+lr: 1e-4
+sample_rate: 16000
+crop_seconds: 0.5
+
+base_channels: 32
+latent_dim: 512
+codebook_size: 1024
+num_quantizers: 8
+
+device: auto
+save_dir: checkpoints
+save_every: 5000
+log_every: 20
+resume: null
+warmup_steps: 1000
+
+run_name: null
+run_description: ""
+tag: []
+
+use_comet: false
+comet_project: neural-audio-codec
+comet_workspace: null
+comet_audio_every: 1000

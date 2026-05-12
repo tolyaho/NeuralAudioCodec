@@ -1,12 +1,15 @@
-"""Evaluate SoundStream checkpoints on LibriSpeech test-clean."""
+"""Run SoundStream checkpoint inference/evaluation on LibriSpeech."""
 
 import argparse
 import json
 import sys
+import warnings
 from pathlib import Path
 
+import hydra
 import soundfile as sf
 import torch
+from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -15,6 +18,8 @@ sys.path.insert(0, str(ROOT))
 
 from src.datasets.librispeech_codec import LibriSpeechCodecDataset
 from src.model.soundstream import SoundStream
+
+warnings.filterwarnings("ignore", category=UserWarning)
 
 
 def build_metrics(sample_rate: int, device: torch.device):
@@ -56,6 +61,13 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
+def config_to_args(config: DictConfig) -> argparse.Namespace:
+    cfg = OmegaConf.to_container(config, resolve=True)
+    if cfg["device"] == "auto":
+        cfg["device"] = "cuda" if torch.cuda.is_available() else "cpu"
+    return argparse.Namespace(**cfg)
+
+
 def sync_ema_buffers(model: SoundStream) -> None:
     for vq in model.quantizer.quantizers:
         vq.ema_cluster_sum.data.copy_(vq.codebook.weight.data)
@@ -79,9 +91,7 @@ def load_codec(path: Path, model: SoundStream, device: torch.device) -> dict:
     return ckpt if isinstance(ckpt, dict) else {}
 
 
-def main() -> None:
-    args = parse_args()
-
+def run(args: argparse.Namespace) -> None:
     device = torch.device(args.device)
     output_dir = ROOT / args.output_dir / Path(args.checkpoint).parent.name
     audio_dir = output_dir / "audio"
@@ -160,7 +170,19 @@ def main() -> None:
     with (output_dir / "metrics.json").open("w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
 
-    print(json.dumps({k: v for k, v in results.items() if not k.endswith("_values")}, indent=2))
+    summary = {k: v for k, v in results.items() if not k.endswith("_values")}
+    print(json.dumps(summary, indent=2))
+
+
+@hydra.main(version_base=None, config_path="../src/configs", config_name="codec_eval")
+def main(config: DictConfig) -> None:
+    """
+    Main script for SoundStream checkpoint evaluation.
+
+    Args:
+        config (DictConfig): hydra experiment config.
+    """
+    run(config_to_args(config))
 
 
 if __name__ == "__main__":

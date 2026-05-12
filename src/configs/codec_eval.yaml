@@ -1,0 +1,15 @@
+checkpoint: ???
+manifest: data/manifests/test-clean.jsonl
+output_dir: reports/eval
+sample_rate: 16000
+batch_size: 1
+num_workers: 0
+limit: null
+save_audio: 10
+
+base_channels: 32
+latent_dim: 512
+codebook_size: 1024
+num_quantizers: 8
+
+device: auto

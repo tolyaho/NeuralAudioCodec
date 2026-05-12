@@ -45,7 +45,6 @@ def set_random_seed(seed):
     os.environ["PYTHONHASHSEED"] = str(seed)
 
 
-# https://github.com/wandb/wandb/blob/main/wandb/sdk/lib/runid.py
 def generate_id(length: int = 8) -> str:
     """
     Generate a random base-36 string of `length` digits.

@@ -9,7 +9,6 @@ librosa
 tqdm
 matplotlib
 pandas
-wandb
 comet_ml
 hydra-core
 PyYAML

@@ -3,10 +3,13 @@
 import argparse
 import json
 import sys
+import warnings
 from datetime import datetime
 from pathlib import Path
 
+import hydra
 import torch
+from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -16,6 +19,7 @@ sys.path.insert(0, str(ROOT))
 from src.datasets.librispeech_codec import LibriSpeechCodecDataset
 from src.discriminators.stft_discriminator import STFTDiscriminator
 from src.discriminators.waveform_discriminator import MultiScaleWaveformDiscriminator
+from src.logger import CometMLWriter
 from src.loss.adversarial_loss import (
     discriminator_hinge_loss,
     feature_matching_loss,
@@ -24,54 +28,14 @@ from src.loss.adversarial_loss import (
 from src.loss.reconstruction_loss import CodecReconstructionLoss
 from src.model.soundstream import SoundStream
 
+warnings.filterwarnings("ignore", category=UserWarning)
 
-def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser()
 
-    p.add_argument("--manifest", type=str, default="data/manifests/train-clean-100.jsonl")
-    p.add_argument("--batch-size", type=int, default=12)
-    p.add_argument("--num-workers", type=int, default=2)
-    p.add_argument("--steps", type=int, default=20000)
-    p.add_argument("--lr", type=float, default=1e-4)
-    p.add_argument("--disc-lr", type=float, default=1e-4)
-    p.add_argument("--sample-rate", type=int, default=16000)
-    p.add_argument("--crop-seconds", type=float, default=0.5)
-    p.add_argument("--gan-warmup-steps", type=int, default=1000)
-
-    p.add_argument("--base-channels", type=int, default=32)
-    p.add_argument("--latent-dim", type=int, default=512)
-    p.add_argument("--codebook-size", type=int, default=1024)
-    p.add_argument("--num-quantizers", type=int, default=8)
-
-    p.add_argument("--disc-base-channels", type=int, default=32)
-    p.add_argument("--adv-weight", type=float, default=1.0)
-    p.add_argument("--feat-weight", type=float, default=100.0)
-
-    p.add_argument("--use-wave-disc", action="store_true")
-    p.add_argument("--wave-disc-base-channels", type=int, default=16)
-
-    p.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
-    p.add_argument("--save-dir", type=str, default="checkpoints")
-    p.add_argument("--save-every", type=int, default=5000)
-    p.add_argument("--log-every", type=int, default=20)
-    p.add_argument("--warmup-steps", type=int, default=1000)
-
-    p.add_argument("--disc-start-step", type=int, default=5000)
-    p.add_argument("--disc-every", type=int, default=4)
-
-    p.add_argument("--pretrained-codec", type=str, default=None)
-    p.add_argument("--resume", type=str, default=None)
-
-    p.add_argument("--run-name", type=str, default=None)
-    p.add_argument("--run-description", type=str, default="")
-    p.add_argument("--tag", action="append", default=[])
-
-    p.add_argument("--use-comet", action="store_true")
-    p.add_argument("--comet-project", type=str, default="neural-audio-codec")
-    p.add_argument("--comet-workspace", type=str, default=None)
-    p.add_argument("--comet-audio-every", type=int, default=1000)
-
-    return p.parse_args()
+def config_to_args(config: DictConfig) -> argparse.Namespace:
+    cfg = OmegaConf.to_container(config, resolve=True)
+    if cfg["device"] == "auto":
+        cfg["device"] = "cuda" if torch.cuda.is_available() else "cpu"
+    return argparse.Namespace(**cfg)
 
 
 def make_run_name(args: argparse.Namespace) -> str:
@@ -85,8 +49,6 @@ def create_experiment(args: argparse.Namespace, run_name: str):
     if not args.use_comet:
         return None
 
-    from comet_ml import Experiment
-
     api_key = None
     workspace = args.comet_workspace
     try:
@@ -97,20 +59,13 @@ def create_experiment(args: argparse.Namespace, run_name: str):
     except ImportError:
         pass
 
-    kwargs = {
-        "project_name": args.comet_project,
-        "auto_param_logging": False,
-        "auto_metric_logging": False,
-    }
-
-    if api_key:
-        kwargs["api_key"] = api_key
-    if workspace:
-        kwargs["workspace"] = workspace
-
-    exp = Experiment(**kwargs)
-    exp.set_name(run_name)
-    exp.log_parameters(vars(args))
+    exp = CometMLWriter(
+        project_name=args.comet_project,
+        project_config=vars(args),
+        workspace=workspace,
+        run_name=run_name,
+        api_key=api_key,
+    )
 
     if args.run_description:
         exp.log_other("description", args.run_description)
@@ -248,8 +203,7 @@ def load_gan_checkpoint(
     return int(ckpt.get("step", 0))
 
 
-def main() -> None:
-    args = parse_args()
+def run(args: argparse.Namespace) -> None:
     device = torch.device(args.device)
 
     if args.resume:
@@ -553,6 +507,17 @@ def main() -> None:
     if exp is not None:
         exp.log_model("soundstream_gan_final", str(final_path))
         exp.end()
+
+
+@hydra.main(version_base=None, config_path="../src/configs", config_name="codec_gan")
+def main(config: DictConfig) -> None:
+    """
+    Main script for adversarial SoundStream training.
+
+    Args:
+        config (DictConfig): hydra experiment config.
+    """
+    run(config_to_args(config))
 
 
 if __name__ == "__main__":
