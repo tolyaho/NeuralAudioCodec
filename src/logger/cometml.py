@@ -6,8 +6,6 @@ from typing import Any
 
 
 class CometMLWriter:
-    """Small Comet adapter used by the training scripts."""
-
     def __init__(
         self,
         project_name: str,

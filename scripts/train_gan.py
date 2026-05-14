@@ -511,12 +511,6 @@ def run(args: argparse.Namespace) -> None:
 
 @hydra.main(version_base=None, config_path="../src/configs", config_name="codec_gan")
 def main(config: DictConfig) -> None:
-    """
-    Main script for adversarial SoundStream training.
-
-    Args:
-        config (DictConfig): hydra experiment config.
-    """
     run(config_to_args(config))
 
 

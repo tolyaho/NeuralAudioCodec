@@ -23,7 +23,6 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 
 def build_metrics(sample_rate: int, device: torch.device):
-    # STOI is not re-exported from torchmetrics.audio unless pystoi is installed.
     from torchmetrics.audio.nisqa import NonIntrusiveSpeechQualityAssessment
     from torchmetrics.audio.stoi import ShortTimeObjectiveIntelligibility
 
@@ -37,28 +36,6 @@ def build_metrics(sample_rate: int, device: torch.device):
     ).to(device)
 
     return stoi_metric, nisqa_metric
-
-
-def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser()
-
-    p.add_argument("--checkpoint", type=str, required=True)
-    p.add_argument("--manifest", type=str, default="data/manifests/test-clean.jsonl")
-    p.add_argument("--output-dir", type=str, default="reports/eval")
-    p.add_argument("--sample-rate", type=int, default=16000)
-    p.add_argument("--batch-size", type=int, default=1)
-    p.add_argument("--num-workers", type=int, default=0)
-    p.add_argument("--limit", type=int, default=None)
-    p.add_argument("--save-audio", type=int, default=10)
-
-    p.add_argument("--base-channels", type=int, default=32)
-    p.add_argument("--latent-dim", type=int, default=512)
-    p.add_argument("--codebook-size", type=int, default=1024)
-    p.add_argument("--num-quantizers", type=int, default=8)
-
-    p.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
-
-    return p.parse_args()
 
 
 def config_to_args(config: DictConfig) -> argparse.Namespace:
@@ -93,7 +70,12 @@ def load_codec(path: Path, model: SoundStream, device: torch.device) -> dict:
 
 def run(args: argparse.Namespace) -> None:
     device = torch.device(args.device)
-    output_dir = ROOT / args.output_dir / Path(args.checkpoint).parent.name
+
+    ckpt_path = Path(args.checkpoint)
+    parent_name = ckpt_path.parent.name
+    run_label = ckpt_path.stem if parent_name in {"checkpoints", "", "."} else parent_name
+
+    output_dir = ROOT / args.output_dir / run_label
     audio_dir = output_dir / "audio"
     audio_dir.mkdir(parents=True, exist_ok=True)
 
@@ -176,12 +158,6 @@ def run(args: argparse.Namespace) -> None:
 
 @hydra.main(version_base=None, config_path="../src/configs", config_name="codec_eval")
 def main(config: DictConfig) -> None:
-    """
-    Main script for SoundStream checkpoint evaluation.
-
-    Args:
-        config (DictConfig): hydra experiment config.
-    """
     run(config_to_args(config))
 
 

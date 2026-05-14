@@ -1,4 +1,4 @@
-"""Train SoundStream codec on LibriSpeech."""
+"""Train SoundStream codec (reconstruction only) on LibriSpeech."""
 
 import argparse
 import json
@@ -272,12 +272,6 @@ def run(args: argparse.Namespace) -> None:
 
 @hydra.main(version_base=None, config_path="../src/configs", config_name="codec_train")
 def main(config: DictConfig) -> None:
-    """
-    Main script for reconstruction-only SoundStream training.
-
-    Args:
-        config (DictConfig): hydra experiment config.
-    """
     run(config_to_args(config))
 
 
