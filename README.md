@@ -1,31 +1,8 @@
 # Neural Audio Codec
 
-SoundStream-style neural audio codec for LibriSpeech speech reconstruction.
+SoundStream-style neural audio codec for 16 kHz speech at 6.4 kbps. Encoder + RVQ + decoder, trained from scratch on LibriSpeech `train-clean-100` with EMA codebook updates, an STFT discriminator, and a small waveform discriminator switched on at step 20 000 with hinge loss and feature matching on top of multi-scale mel reconstruction.
 
-The final model is trained from scratch with EMA RVQ, an STFT discriminator
-and a small waveform discriminator, both turned on late with hinge loss and
-feature matching. Discriminator starts at step 20k, wave discriminator base
-channels 8, feature matching weight 3.0.
-
-Final checkpoint:
-
-```text
-checkpoints/20260509_191350_gan_scratch_ema_disc20k_wave8_fm3_45k/final.pt
-```
-
-A stable path `checkpoints/final_soundstream.pt` is used everywhere else in
-the docs. Fetch it with:
-
-```bash
-bash scripts/download_checkpoint.sh
-```
-
-`CHECKPOINT_URL` overrides the default URL baked into the script; `CHECKPOINT_DEST`
-overrides the output path. Yandex Disk public share URLs
-(`https://disk.yandex.ru/d/<id>`) are resolved to a direct download link through
-the cloud-api; HuggingFace `resolve/main` URLs and other direct links work as-is.
-
-Final full `test-clean` results:
+Final model on full `test-clean` (n = 2620):
 
 | model                                          |   STOI |  NISQA |
 | ---------------------------------------------- | -----: | -----: |
@@ -33,8 +10,25 @@ Final full `test-clean` results:
 | two-stage STFT-GAN (from reconstruction)       | 0.9317 | 2.3278 |
 | scratch EMA RVQ + delayed STFT/wave GAN (final)| 0.9399 | 2.5212 |
 
-Final numbers in full precision: STOI `0.9398752048725391`,
-NISQA `2.5212083049857887`.
+Full precision: STOI `0.9398752048725391`, NISQA `2.5212083049857887`. Clears the grade-5 thresholds (STOI > 0.80, NISQA > 2.25) on both metrics.
+
+## Report
+
+Full Comet ML Report — problem framing, all experiments with curves and audio, ablations, GAN vs no-GAN bonus, per-step loss terms, codebook perplexity:
+
+→ https://www.comet.com/tolya-ho/neural-audio-codec/reports/bjGhn710Lq4THJBv3eqoCNKnE
+
+Supplementary analysis (qualitative in-domain, external English, Russian, quantitative) lives in `notebooks/analysis.ipynb`.
+
+## Checkpoint
+
+Final checkpoint: `checkpoints/20260509_191350_gan_scratch_ema_disc20k_wave8_fm3_45k/final.pt`. Everywhere else (this README, the demo, the analysis notebook) the stable alias `checkpoints/final_soundstream.pt` is used.
+
+```bash
+bash scripts/download_checkpoint.sh
+```
+
+`CHECKPOINT_URL` and `CHECKPOINT_DEST` override the URL and output path. HuggingFace `resolve/main` URLs and other direct links work as-is; Yandex Disk shares are resolved through the cloud-api.
 
 ## Setup
 
@@ -63,18 +57,16 @@ data/manifests/train-clean-100.jsonl
 data/manifests/test-clean.jsonl
 ```
 
-## Comet
+## Logging
 
-Logging is optional. Either set the environment variables or drop a local
-`private_tokens.py` (it is gitignored):
+Comet logging is optional but used throughout training. Either set the environment variables or drop a local `private_tokens.py` (gitignored):
 
 ```bash
 export COMET_API_KEY="..."
 export COMET_WORKSPACE="..."
 ```
 
-Hydra does not like commas in unquoted values. If a description has commas,
-wrap it like so:
+Hydra does not like commas in unquoted values. Wrap descriptions with commas like so:
 
 ```bash
 'run_description="Final scratch EMA RVQ run with delayed STFT/wave GAN"'
@@ -82,8 +74,7 @@ wrap it like so:
 
 ## Training
 
-All scripts use Hydra-style `key=value` overrides on top of the YAML configs
-under `src/configs/`.
+All scripts use Hydra-style `key=value` overrides on top of the YAML configs in `src/configs/`. The three runs below match the three anchor runs in the report.
 
 ### Reconstruction baseline
 
@@ -102,7 +93,7 @@ python scripts/train.py \
   tag='[reconstruction,baseline,mel-loss,rvq,45k]'
 ```
 
-### Two-stage STFT-GAN (fine-tune from reconstruction)
+### Two-stage STFT-GAN (finetune from reconstruction)
 
 ```bash
 python scripts/train_gan.py \
@@ -125,7 +116,9 @@ python scripts/train_gan.py \
   tag='[gan,two-stage,stft-discriminator,feature-matching,45k]'
 ```
 
-### Final scratch EMA + STFT/wave GAN
+### Final scratch EMA + delayed STFT/wave GAN
+
+The configuration that ships. Reproduces the final checkpoint.
 
 ```bash
 python scripts/train_gan.py \
@@ -151,9 +144,11 @@ python scripts/train_gan.py \
   tag='[gan,scratch,final,ema-rvq,stft-discriminator,waveform-discriminator,45k]'
 ```
 
+`src/configs/codec_gan.yaml` is pinned to these values, so an override-free `python scripts/train_gan.py` reproduces the final run.
+
 ## Evaluation
 
-Full `test-clean` evaluation, using the stable checkpoint path:
+Full `test-clean` evaluation:
 
 ```bash
 python scripts/inference.py checkpoint=checkpoints/final_soundstream.pt save_audio=20
@@ -165,21 +160,23 @@ Fast smoke (two utterances, no audio dumped):
 python scripts/inference.py checkpoint=checkpoints/final_soundstream.pt limit=2 save_audio=0
 ```
 
-Metrics and audio land under `reports/eval/<run-or-stem>/`.
+Metrics (per-utterance STOI / NISQA and summary statistics) and audio land under `reports/eval/<run-or-stem>/`. The full per-utterance distribution for the final checkpoint is committed at `data/metrics_final.json` and consumed by the analysis notebook.
 
 ## Demo
 
-The mandatory `notebooks/demo.ipynb` clones the repo, installs deps,
-downloads the checkpoint and synthesizes a user-provided URL through the
-codec. Open it in a fresh Google Colab session and run all cells.
+`notebooks/demo.ipynb` clones the repo, installs dependencies, downloads the checkpoint, and re-synthesizes any user-provided audio URL through the codec. Open it in a fresh Google Colab session and run all cells.
+
+## Analysis
+
+`notebooks/analysis.ipynb` covers the qualitative, external-dataset, and quantitative analyses required by the assignment. Code lives in `src/analysis.py`; the notebook contains only markdown and thin calls into that module. Run `bash scripts/download_external.sh` once before opening the notebook to fetch the two external English clips (the Russian clips are bundled).
 
 ## Repo layout
 
 ```text
-scripts/   training, evaluation, data prep
-src/       model, datasets, losses, discriminators, logger
-docs/      assignment specification
-tests/     light interface tests
+scripts/    training, evaluation, data prep
+src/        model, datasets, losses, discriminators, logger, analysis
+notebooks/  analysis + colab demo
+tests/      light interface tests
 ```
 
 ## License
