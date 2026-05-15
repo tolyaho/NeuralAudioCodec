@@ -63,7 +63,12 @@ private_tokens*.py
 !.env.example
 
 # Data, runs, checkpoints
-data/
+data/*
+!data/external/
+data/external/*
+!data/external/russian/
+data/external/russian/*
+!data/external/russian/*.wav
 input/
 saved/
 checkpoints/
