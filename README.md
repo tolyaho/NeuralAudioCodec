@@ -13,8 +13,17 @@ Final checkpoint:
 checkpoints/20260509_191350_gan_scratch_ema_disc20k_wave8_fm3_45k/final.pt
 ```
 
-A stable symlink is shipped at `checkpoints/final_soundstream.pt` for
-convenience.
+A stable path `checkpoints/final_soundstream.pt` is used everywhere else in
+the docs. Fetch it with:
+
+```bash
+bash scripts/download_checkpoint.sh
+```
+
+`CHECKPOINT_URL` overrides the default URL baked into the script; `CHECKPOINT_DEST`
+overrides the output path. Yandex Disk public share URLs
+(`https://disk.yandex.ru/d/<id>`) are resolved to a direct download link through
+the cloud-api; HuggingFace `resolve/main` URLs and other direct links work as-is.
 
 Final full `test-clean` results:
 
