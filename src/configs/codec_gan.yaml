@@ -1,30 +1,30 @@
 manifest: data/manifests/train-clean-100.jsonl
 batch_size: 12
 num_workers: 2
-steps: 20000
+steps: 45000
 lr: 1e-4
-disc_lr: 1e-4
+disc_lr: 5e-7
 sample_rate: 16000
 crop_seconds: 0.5
-gan_warmup_steps: 1000
+gan_warmup_steps: 15000
 
 base_channels: 32
 latent_dim: 512
 codebook_size: 1024
 num_quantizers: 8
 
-disc_base_channels: 32
-adv_weight: 1.0
-feat_weight: 100.0
-use_wave_disc: false
-wave_disc_base_channels: 16
+disc_base_channels: 16
+adv_weight: 0.02
+feat_weight: 3.0
+use_wave_disc: true
+wave_disc_base_channels: 8
 
 device: auto
 save_dir: checkpoints
 save_every: 5000
-log_every: 20
+log_every: 100
 warmup_steps: 1000
-disc_start_step: 5000
+disc_start_step: 20000
 disc_every: 4
 
 pretrained_codec: null
@@ -37,4 +37,4 @@ tag: []
 use_comet: false
 comet_project: neural-audio-codec
 comet_workspace: null
-comet_audio_every: 1000
+comet_audio_every: 2500

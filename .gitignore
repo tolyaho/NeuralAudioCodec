@@ -65,6 +65,7 @@ private_tokens*.py
 # Data, runs, checkpoints
 data/*
 !data/external/
+!data/metrics_final.json
 data/external/*
 !data/external/russian/
 data/external/russian/*

@@ -1,5 +1,3 @@
-# GAN stage: starts from a reconstruction-only checkpoint, switches on STFT
-
 import argparse
 import json
 import sys
@@ -279,7 +277,6 @@ def run(args: argparse.Namespace) -> None:
         codec_lr = update_lr(codec_optimizer, args.lr, step, args.warmup_steps)
         disc_lr = update_lr(disc_optimizer, args.disc_lr, step, args.warmup_steps)
 
-        # gan warmup: 0 until disc_start_step, then linear ramp over gan_warmup_steps
         if step < args.disc_start_step:
             gan_scale = 0.0
         elif args.gan_warmup_steps <= 0:
@@ -327,7 +324,6 @@ def run(args: argparse.Namespace) -> None:
             real_logit_val = sum(_mlogits(o).item() for o in real_outs) / len(real_outs)
             fake_logit_val = sum(_mlogits(o).item() for o in fake_outs) / len(fake_outs)
 
-        # generator step: freeze discs
         for p in disc_params:
             p.requires_grad_(False)
         codec_optimizer.zero_grad(set_to_none=True)
@@ -347,7 +343,6 @@ def run(args: argparse.Namespace) -> None:
                 for r, f in zip(real_outs_fm, fake_outs_g)
             ) / len(fake_outs_g)
 
-            # overwrite with FM-stage values when we have them — closer to gen loop
             real_logit_val = sum(_mlogits(o).item() for o in real_outs_fm) / len(real_outs_fm)
             fake_logit_val = sum(_mlogits(o).item() for o in fake_outs_g) / len(fake_outs_g)
         else:
@@ -359,7 +354,6 @@ def run(args: argparse.Namespace) -> None:
         g_grad_norm = torch.nn.utils.clip_grad_norm_(codec.parameters(), max_norm=10.0)
         codec_optimizer.step()
 
-        # unfreeze for next iter
         for p in disc_params:
             p.requires_grad_(True)
 

@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
-# pulls the external speech samples used by notebooks/analysis.ipynb.
-# russian samples are not bundled — drop your own wavs into data/external/russian/.
-# from mp3 (mono 16 khz wav): copy russian-dialogue-intro.mp3 there, then
-#   bash scripts/prepare_russian_sample.sh
+# pulls the external english clips used by notebooks/analysis.ipynb.
+# russian clips are bundled in data/external/russian/.
 set -euo pipefail
 
 DEST_EN="data/external/english"

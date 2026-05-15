@@ -1,6 +1,4 @@
-# residual VQ, EMA codebook updates, straight-through estimator
-# tried the vector-quantize-pytorch lib first, swapped to this so I could
-# control the EMA buffers and not silently load mismatched shapes on resume
+# residual VQ with EMA codebook updates and a straight-through estimator.
 
 import torch
 import torch.nn.functional as F

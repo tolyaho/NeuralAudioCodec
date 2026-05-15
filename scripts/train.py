@@ -1,5 +1,3 @@
-# reconstruction-only training entry point. GAN stage lives in train_gan.py
-
 import argparse
 import json
 import sys

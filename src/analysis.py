@@ -20,13 +20,12 @@ SR = 16000
 N_FFT, HOP, N_MELS = 1024, 256, 80
 
 CKPT = ROOT / "checkpoints/final_soundstream.pt"
-METRICS = ROOT / "reports/eval/20260509_191350_gan_scratch_ema_disc20k_wave8_fm3_45k/metrics.json"
+METRICS = ROOT / "data/metrics_final.json"
 TEST_MANIFEST = ROOT / "data/manifests/test-clean.jsonl"
 EXT_DIR = ROOT / "data/external"
 
 DEFAULT_IDXS = [0, 1, 50, 600]
 
-# (url, local filename) — kept in sync with scripts/download_external.sh
 EN_FILES = [
     ("https://keithito.com/LJ-Speech-Dataset/LJ025-0076.wav", "lj025-0076.wav"),
     ("https://github.com/microsoft/MS-SNSD/raw/master/clean_test/clnsp1.wav", "microsoft_clean.wav"),
@@ -49,7 +48,6 @@ def _model():
     ckpt = torch.load(CKPT, map_location=device)
     state = ckpt.get("codec", ckpt.get("model", ckpt))
     missing, _ = m.load_state_dict(state, strict=False)
-    # older checkpoints don't persist rvq EMA buffers — re-seed from the codebook weights
     if any("ema_" in k for k in missing):
         for vq in m.quantizer.quantizers:
             vq.ema_cluster_sum.data.copy_(vq.codebook.weight.data)
