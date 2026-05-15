@@ -1,4 +1,6 @@
-"""Residual vector quantization for SoundStream."""
+# residual VQ, EMA codebook updates, straight-through estimator
+# tried the vector-quantize-pytorch lib first, swapped to this so I could
+# control the EMA buffers and not silently load mismatched shapes on resume
 
 import torch
 import torch.nn.functional as F

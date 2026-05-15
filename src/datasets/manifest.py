@@ -1,5 +1,3 @@
-"""Build LibriSpeech manifest files."""
-
 import json
 from pathlib import Path
 

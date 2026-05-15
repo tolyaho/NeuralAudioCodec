@@ -1,5 +1,3 @@
-"""Adversarial losses for SoundStream GAN training."""
-
 import torch
 import torch.nn.functional as F
 

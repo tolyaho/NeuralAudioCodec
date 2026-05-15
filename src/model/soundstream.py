@@ -1,5 +1,3 @@
-"""SoundStream codec model."""
-
 import torch
 from torch import nn
 

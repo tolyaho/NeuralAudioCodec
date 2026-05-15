@@ -1,5 +1,3 @@
-"""Build LibriSpeech manifests for training and evaluation."""
-
 import json
 import sys
 from pathlib import Path

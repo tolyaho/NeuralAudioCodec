@@ -1,5 +1,3 @@
-"""Building blocks for SoundStream components."""
-
 import math
 
 import torch

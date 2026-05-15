@@ -1,5 +1,3 @@
-"""STFT-based discriminator."""
-
 import torch
 from torch import nn
 

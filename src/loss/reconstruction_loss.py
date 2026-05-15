@@ -1,5 +1,3 @@
-"""Reconstruction losses for SoundStream training."""
-
 import math
 
 import torch

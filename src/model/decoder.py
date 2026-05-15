@@ -1,5 +1,3 @@
-"""SoundStream decoder."""
-
 import torch
 from torch import nn
 

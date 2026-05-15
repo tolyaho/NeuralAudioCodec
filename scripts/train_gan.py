@@ -1,4 +1,4 @@
-"""Adversarial fine-tuning for SoundStream on LibriSpeech."""
+# GAN stage: starts from a reconstruction-only checkpoint, switches on STFT
 
 import argparse
 import json
@@ -93,28 +93,15 @@ def update_lr(
     return lr
 
 
-def loss_scale(step: int, warmup_steps: int) -> float:
-    if warmup_steps <= 0:
-        return 1.0
-    return min(1.0, step / warmup_steps)
-
-
-def infinite_loader(loader: DataLoader):
+def infinite_loader(loader):
     while True:
         for batch in loader:
             yield batch
 
 
-def set_requires_grad(module: torch.nn.Module, value: bool) -> None:
-    for p in module.parameters():
-        p.requires_grad_(value)
-
-
-def mean_logits(out: dict) -> torch.Tensor:
-    logits = out["logits"]
-    if isinstance(logits, torch.Tensor):
-        return logits.mean()
-    return sum(l.mean() for l in logits) / len(logits)
+def _mlogits(out):
+    x = out["logits"]
+    return x.mean() if torch.is_tensor(x) else sum(l.mean() for l in x) / len(x)
 
 
 def save_checkpoint(
@@ -184,22 +171,11 @@ def load_gan_checkpoint(
     if any("ema_" in k for k in missing):
         sync_ema_buffers(codec)
 
-    if "stft_disc" in ckpt:
-        stft_disc.load_state_dict(ckpt["stft_disc"])
-    elif "discriminator" in ckpt:
-        stft_disc.load_state_dict(ckpt["discriminator"])
-
+    stft_disc.load_state_dict(ckpt["stft_disc"])
     if wave_disc is not None and ckpt.get("wave_disc") is not None:
         wave_disc.load_state_dict(ckpt["wave_disc"])
-
-    if "codec_optimizer" in ckpt:
-        codec_optimizer.load_state_dict(ckpt["codec_optimizer"])
-    elif "optimizer" in ckpt:
-        codec_optimizer.load_state_dict(ckpt["optimizer"])
-
-    if "disc_optimizer" in ckpt:
-        disc_optimizer.load_state_dict(ckpt["disc_optimizer"])
-
+    codec_optimizer.load_state_dict(ckpt["codec_optimizer"])
+    disc_optimizer.load_state_dict(ckpt["disc_optimizer"])
     return int(ckpt.get("step", 0))
 
 
@@ -303,30 +279,31 @@ def run(args: argparse.Namespace) -> None:
         codec_lr = update_lr(codec_optimizer, args.lr, step, args.warmup_steps)
         disc_lr = update_lr(disc_optimizer, args.disc_lr, step, args.warmup_steps)
 
-        gan_step = max(0, step - args.disc_start_step)
-
+        # gan warmup: 0 until disc_start_step, then linear ramp over gan_warmup_steps
         if step < args.disc_start_step:
             gan_scale = 0.0
+        elif args.gan_warmup_steps <= 0:
+            gan_scale = 1.0
         else:
-            gan_scale = loss_scale(gan_step, args.gan_warmup_steps)
+            gan_scale = min(1.0, (step - args.disc_start_step) / args.gan_warmup_steps)
 
         adv_weight = args.adv_weight * gan_scale
         feat_weight = args.feat_weight * gan_scale
 
-        d_loss = torch.tensor(0.0, device=device)
-        d_losses_per_disc = [torch.tensor(0.0, device=device)] * len(discriminators)
-        d_grad_norm = torch.tensor(0.0, device=device)
-        real_logit_mean = torch.tensor(0.0, device=device)
-        fake_logit_mean = torch.tensor(0.0, device=device)
+        d_loss_val = 0.0
+        d_losses_val = [0.0] * len(discriminators)
+        d_grad_norm_val = 0.0
+        real_logit_val = 0.0
+        fake_logit_val = 0.0
 
-        do_disc_update = (
+        do_disc = (
             step >= args.disc_start_step
             and (step - args.disc_start_step) % args.disc_every == 0
         )
 
-        if do_disc_update:
-            for d in discriminators:
-                set_requires_grad(d, True)
+        if do_disc:
+            for p in disc_params:
+                p.requires_grad_(True)
             disc_optimizer.zero_grad(set_to_none=True)
 
             with torch.no_grad():
@@ -335,21 +312,24 @@ def run(args: argparse.Namespace) -> None:
             real_outs = [d(audio) for d in discriminators]
             fake_outs = [d(fake_audio.detach()) for d in discriminators]
 
-            d_losses_per_disc = [
+            d_losses = [
                 discriminator_hinge_loss(r["logits"], f["logits"])
                 for r, f in zip(real_outs, fake_outs)
             ]
-            d_loss = sum(d_losses_per_disc) / len(d_losses_per_disc)
+            d_loss = sum(d_losses) / len(d_losses)
 
             d_loss.backward()
-            d_grad_norm = torch.nn.utils.clip_grad_norm_(disc_params, max_norm=10.0)
+            d_grad_norm_val = float(torch.nn.utils.clip_grad_norm_(disc_params, max_norm=10.0))
             disc_optimizer.step()
 
-            real_logit_mean = sum(mean_logits(o) for o in real_outs).detach() / len(real_outs)
-            fake_logit_mean = sum(mean_logits(o) for o in fake_outs).detach() / len(fake_outs)
+            d_loss_val = d_loss.item()
+            d_losses_val = [l.item() for l in d_losses]
+            real_logit_val = sum(_mlogits(o).item() for o in real_outs) / len(real_outs)
+            fake_logit_val = sum(_mlogits(o).item() for o in fake_outs) / len(fake_outs)
 
-        for d in discriminators:
-            set_requires_grad(d, False)
+        # generator step: freeze discs
+        for p in disc_params:
+            p.requires_grad_(False)
         codec_optimizer.zero_grad(set_to_none=True)
 
         out = codec(audio)
@@ -358,39 +338,36 @@ def run(args: argparse.Namespace) -> None:
 
         if gan_scale > 0.0:
             fake_outs_g = [d(reconstruction) for d in discriminators]
-
             with torch.no_grad():
                 real_outs_fm = [d(audio) for d in discriminators]
 
-            g_adv_losses = [generator_hinge_loss(o["logits"]) for o in fake_outs_g]
-            g_adv_loss = sum(g_adv_losses) / len(g_adv_losses)
-
-            feat_losses = [
+            g_adv_loss = sum(generator_hinge_loss(o["logits"]) for o in fake_outs_g) / len(fake_outs_g)
+            feat_loss = sum(
                 feature_matching_loss(r["features"], f["features"])
                 for r, f in zip(real_outs_fm, fake_outs_g)
-            ]
-            feat_loss = sum(feat_losses) / len(feat_losses)
+            ) / len(fake_outs_g)
 
-            real_logit_mean = sum(mean_logits(o) for o in real_outs_fm).detach() / len(real_outs_fm)
-            fake_logit_mean = sum(mean_logits(o) for o in fake_outs_g).detach() / len(fake_outs_g)
+            # overwrite with FM-stage values when we have them — closer to gen loop
+            real_logit_val = sum(_mlogits(o).item() for o in real_outs_fm) / len(real_outs_fm)
+            fake_logit_val = sum(_mlogits(o).item() for o in fake_outs_g) / len(fake_outs_g)
         else:
             g_adv_loss = torch.tensor(0.0, device=device)
             feat_loss = torch.tensor(0.0, device=device)
 
         g_loss = rec_losses["loss"] + adv_weight * g_adv_loss + feat_weight * feat_loss
-
         g_loss.backward()
         g_grad_norm = torch.nn.utils.clip_grad_norm_(codec.parameters(), max_norm=10.0)
         codec_optimizer.step()
 
-        for d in discriminators:
-            set_requires_grad(d, True)
+        # unfreeze for next iter
+        for p in disc_params:
+            p.requires_grad_(True)
 
         if step % args.log_every == 0:
             last_metrics = {
                 "train/g_loss": g_loss.item(),
-                "train/d_loss": d_loss.item(),
-                "train/d_loss_stft": d_losses_per_disc[0].item(),
+                "train/d_loss": d_loss_val,
+                "train/d_loss_stft": d_losses_val[0],
                 "train/reconstruction_loss": rec_losses["reconstruction_loss"].item(),
                 "train/codebook_loss": rec_losses["codebook_loss"].item(),
                 "train/commitment_loss": rec_losses["commitment_loss"].item(),
@@ -398,18 +375,17 @@ def run(args: argparse.Namespace) -> None:
                 "train/g_adv_loss": g_adv_loss.item(),
                 "train/feature_loss": feat_loss.item(),
                 "train/g_grad_norm": float(g_grad_norm),
-                "train/d_grad_norm": float(d_grad_norm),
+                "train/d_grad_norm": d_grad_norm_val,
                 "train/lr": codec_lr,
                 "train/disc_lr": disc_lr,
                 "train/adv_weight": adv_weight,
                 "train/feat_weight": feat_weight,
                 "train/gan_scale": gan_scale,
-                "train/real_logits": real_logit_mean.item(),
-                "train/fake_logits": fake_logit_mean.item(),
+                "train/real_logits": real_logit_val,
+                "train/fake_logits": fake_logit_val,
             }
-
             if wave_disc is not None:
-                last_metrics["train/d_loss_wave"] = d_losses_per_disc[1].item()
+                last_metrics["train/d_loss_wave"] = d_losses_val[1]
 
             pbar.set_postfix(
                 g=f"{last_metrics['train/g_loss']:.3f}",
@@ -424,23 +400,18 @@ def run(args: argparse.Namespace) -> None:
                 exp.log_metrics(last_metrics, step=step)
 
         if exp is not None and args.comet_audio_every > 0 and step % args.comet_audio_every == 0:
-            exp.log_audio(
-                audio[0, 0].detach().cpu().numpy(),
-                sample_rate=args.sample_rate,
-                file_name=f"step_{step:06d}_original.wav",
-                step=step,
-            )
-            exp.log_audio(
-                reconstruction[0, 0].detach().cpu().numpy(),
-                sample_rate=args.sample_rate,
-                file_name=f"step_{step:06d}_reconstruction.wav",
-                step=step,
-            )
+            for tag, signal in (("original", audio), ("reconstruction", reconstruction)):
+                exp.log_audio(
+                    signal[0, 0].detach().cpu().numpy(),
+                    sample_rate=args.sample_rate,
+                    file_name=f"step_{step:06d}_{tag}.wav",
+                    step=step,
+                )
 
         if step % args.save_every == 0:
             metrics = {
                 "g_loss": g_loss.item(),
-                "d_loss": d_loss.item(),
+                "d_loss": d_loss_val,
                 "reconstruction_loss": rec_losses["reconstruction_loss"].item(),
                 "codebook_loss": rec_losses["codebook_loss"].item(),
                 "commitment_loss": rec_losses["commitment_loss"].item(),
@@ -450,59 +421,21 @@ def run(args: argparse.Namespace) -> None:
             }
 
             step_path = run_dir / f"step_{step:06d}.pt"
-            latest_path = run_dir / "latest.pt"
-
-            save_checkpoint(
-                step_path,
-                codec,
-                stft_disc,
-                wave_disc,
-                codec_optimizer,
-                disc_optimizer,
-                step,
-                args,
-                metrics,
-            )
-            save_checkpoint(
-                latest_path,
-                codec,
-                stft_disc,
-                wave_disc,
-                codec_optimizer,
-                disc_optimizer,
-                step,
-                args,
-                metrics,
-            )
+            for path in (step_path, run_dir / "latest.pt"):
+                save_checkpoint(
+                    path, codec, stft_disc, wave_disc,
+                    codec_optimizer, disc_optimizer, step, args, metrics,
+                )
 
             if exp is not None:
                 exp.log_model(f"soundstream_gan_step_{step:06d}", str(step_path))
 
     final_path = run_dir / "final.pt"
-    latest_path = run_dir / "latest.pt"
-
-    save_checkpoint(
-        final_path,
-        codec,
-        stft_disc,
-        wave_disc,
-        codec_optimizer,
-        disc_optimizer,
-        args.steps,
-        args,
-        last_metrics,
-    )
-    save_checkpoint(
-        latest_path,
-        codec,
-        stft_disc,
-        wave_disc,
-        codec_optimizer,
-        disc_optimizer,
-        args.steps,
-        args,
-        last_metrics,
-    )
+    for path in (final_path, run_dir / "latest.pt"):
+        save_checkpoint(
+            path, codec, stft_disc, wave_disc,
+            codec_optimizer, disc_optimizer, args.steps, args, last_metrics,
+        )
 
     if exp is not None:
         exp.log_model("soundstream_gan_final", str(final_path))

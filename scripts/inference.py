@@ -1,5 +1,3 @@
-"""Run SoundStream checkpoint inference/evaluation on LibriSpeech."""
-
 import argparse
 import json
 import sys

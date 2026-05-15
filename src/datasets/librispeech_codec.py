@@ -1,5 +1,3 @@
-"""LibriSpeech dataset utilities for codec training."""
-
 import json
 import random
 from pathlib import Path
