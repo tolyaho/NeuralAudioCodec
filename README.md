@@ -10,7 +10,7 @@ Final model on full `test-clean` (n = 2620):
 | two-stage STFT-GAN (from reconstruction)       | 0.9317 | 2.3278 |
 | scratch EMA RVQ + delayed STFT/wave GAN (final)| 0.9399 | 2.5212 |
 
-Full precision: STOI `0.9398752048725391`, NISQA `2.5212083049857887`. Clears the grade-5 thresholds (STOI > 0.80, NISQA > 2.25) on both metrics.
+Full precision: STOI `0.9398752048725391`, NISQA `2.5212083049857887`.
 
 ## Report
 
