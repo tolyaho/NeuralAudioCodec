@@ -1,6 +1,8 @@
 torch
 torchaudio
 torchmetrics
+pystoi  # torchmetrics STOI
+requests  # torchmetrics NISQA (downloads its weights on first use)
 numpy
 scipy
 soundfile
@@ -8,6 +10,7 @@ librosa
 tqdm
 matplotlib
 pandas
+ipython  # src/analysis.py audio players
 comet_ml
 hydra-core
 PyYAML

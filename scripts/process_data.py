@@ -1,3 +1,4 @@
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -26,7 +27,16 @@ def print_summary(split: str, summary: dict) -> None:
 
 
 def main() -> None:
-    splits = ["train-clean-100", "test-clean"]
+    parser = argparse.ArgumentParser(
+        description="Build JSONL manifests for LibriSpeech splits in data/raw/LibriSpeech/."
+    )
+    parser.add_argument(
+        "splits",
+        nargs="*",
+        default=["train-clean-100", "test-clean"],
+        help="splits to index (default: train-clean-100 test-clean)",
+    )
+    splits = parser.parse_args().splits
     out_dir = Path("data/manifests")
     summaries = {}
 
@@ -45,7 +55,9 @@ def main() -> None:
     with summary_path.open("w", encoding="utf-8") as f:
         json.dump(summaries, f, indent=2, ensure_ascii=False)
 
-    print(f"\nBuilt the manifests and saved summaries to {summary_path.relative_to(ROOT)}")
+    print(
+        f"\nBuilt the manifests and saved summaries to {summary_path.relative_to(ROOT)}"
+    )
 
 
 if __name__ == "__main__":

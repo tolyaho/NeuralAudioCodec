@@ -1,0 +1,74 @@
+{
+  "checkpoint": "checkpoints/final_soundstream.pt",
+  "checkpoint_sha256": "f63f64785ea22c722c92f3e0c0e6b39327c8b7ebb120c91682e8117e1d5a52e3",
+  "checkpoint_step": 45000,
+  "device": "cpu",
+  "torch": "2.15.0",
+  "torchmetrics": "1.9.0",
+  "clips": [
+    {
+      "key": "1089-134686-0000",
+      "source": "LibriSpeech test-clean",
+      "manifest_index": 0,
+      "duration_s": 10.435,
+      "stoi": 0.9485476016998291,
+      "nisqa_reconstruction": 2.011648178100586,
+      "nisqa_original": 4.5106730461120605,
+      "original": "assets/audio/1089-134686-0000_original.flac",
+      "reconstruction": "assets/audio/1089-134686-0000_reconstruction.flac"
+    },
+    {
+      "key": "1089-134686-0001",
+      "source": "LibriSpeech test-clean",
+      "manifest_index": 1,
+      "duration_s": 3.275,
+      "stoi": 0.9444829225540161,
+      "nisqa_reconstruction": 2.103562593460083,
+      "nisqa_original": 4.410621166229248,
+      "original": "assets/audio/1089-134686-0001_original.flac",
+      "reconstruction": "assets/audio/1089-134686-0001_reconstruction.flac"
+    },
+    {
+      "key": "1089-134686-0002",
+      "source": "LibriSpeech test-clean",
+      "manifest_index": 2,
+      "duration_s": 6.625,
+      "stoi": 0.9366059303283691,
+      "nisqa_reconstruction": 2.3696818351745605,
+      "nisqa_original": 4.334164142608643,
+      "original": "assets/audio/1089-134686-0002_original.flac",
+      "reconstruction": "assets/audio/1089-134686-0002_reconstruction.flac"
+    },
+    {
+      "key": "1089-134686-0003",
+      "source": "LibriSpeech test-clean",
+      "manifest_index": 3,
+      "duration_s": 2.68,
+      "stoi": 0.9404057264328003,
+      "nisqa_reconstruction": 4.03996467590332,
+      "nisqa_original": 4.70648193359375,
+      "original": "assets/audio/1089-134686-0003_original.flac",
+      "reconstruction": "assets/audio/1089-134686-0003_reconstruction.flac"
+    },
+    {
+      "key": "fleurs_ru_1571",
+      "source": "data/external/russian/fleurs_ru_1571.wav",
+      "duration_s": 10.2,
+      "stoi": 0.9220916032791138,
+      "nisqa_reconstruction": 1.574776530265808,
+      "nisqa_original": 2.7904484272003174,
+      "original": "assets/audio/fleurs_ru_1571_original.flac",
+      "reconstruction": "assets/audio/fleurs_ru_1571_reconstruction.flac"
+    },
+    {
+      "key": "fleurs_ru_1651",
+      "source": "data/external/russian/fleurs_ru_1651.wav",
+      "duration_s": 10.56,
+      "stoi": 0.9302213788032532,
+      "nisqa_reconstruction": 1.7064098119735718,
+      "nisqa_original": 4.024768352508545,
+      "original": "assets/audio/fleurs_ru_1651_original.flac",
+      "reconstruction": "assets/audio/fleurs_ru_1651_reconstruction.flac"
+    }
+  ]
+}

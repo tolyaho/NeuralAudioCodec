@@ -70,6 +70,7 @@ data/external/*
 !data/external/russian/
 data/external/russian/*
 !data/external/russian/*.wav
+!data/external/russian/SOURCE.md
 input/
 saved/
 checkpoints/

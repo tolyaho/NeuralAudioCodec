@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # pulls the external english clips used by notebooks/analysis.ipynb.
-# russian clips are bundled in data/external/russian/.
+# russian clips (FLEURS ru_ru, CC BY 4.0) are bundled in data/external/russian/; see SOURCE.md there.
 set -euo pipefail
 
 DEST_EN="data/external/english"

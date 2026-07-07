@@ -9,8 +9,8 @@ BASE_URL="https://www.openslr.org/resources/12"
 
 download() {
   local name="$1"
-  if [[ -d "${name}" ]]; then
-    echo "[skip] ${name}/ already exists"
+  if [[ -d "LibriSpeech/${name}" ]]; then
+    echo "[skip] LibriSpeech/${name}/ already exists"
     return 0
   fi
   if [[ -f "${name}.tar.gz" ]]; then
@@ -23,7 +23,14 @@ download() {
   tar -xzf "${name}.tar.gz"
 }
 
-download "train-clean-100"
-download "test-clean"
+# Usage: bash scripts/prepare_data.sh [split ...]   (default: train-clean-100 test-clean)
+if [[ $# -gt 0 ]]; then
+  SPLITS=("$@")
+else
+  SPLITS=(train-clean-100 test-clean)
+fi
+for split in "${SPLITS[@]}"; do
+  download "${split}"
+done
 
 echo "done: audio is under ${RAW}/LibriSpeech/"
