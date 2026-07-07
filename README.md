@@ -115,9 +115,11 @@ The codec never saw Russian in training. The two clips are FLEURS ru_ru dev utte
 
 PyTorch, torchaudio, torchmetrics (STOI, NISQA), Hydra, Comet ML, librosa and matplotlib for analysis, Hugging Face Hub for the checkpoint.
 
-## Origin and my contribution
+## Project context and attribution
 
-I built this as a course homework (AI360). The repository was started from Petr Grinberg's [PyTorch project template](https://github.com/Blinorot/pytorch_project_template) (MIT). That is why the template's commit history appears here and why `LICENSE` keeps the template author's copyright line next to mine. I later removed most of the template modules. The model, quantizer, losses, discriminators, training and evaluation scripts, analysis, and all experiments are my own work. From the template, the `LICENSE`, the lint and pre-commit configuration, and a heavily rewritten Comet writer (`src/logger/cometml.py`) remain.
+Developed as an AI360 course project. I implemented the codec, residual vector quantizer, losses, discriminators, training and evaluation pipelines, analysis, and experiments.
+
+The repository started from [Petr Grinberg's PyTorch project template](https://github.com/Blinorot/pytorch_project_template) (MIT). Its original copyright notice remains in [LICENSE](LICENSE); the remaining template components are development tooling and a substantially modified Comet logger (`src/logger/cometml.py`).
 
 ## Running locally
 
@@ -288,7 +290,7 @@ python scripts/make_audio_demo.py --device cpu
 
 ### Analysis
 
-`notebooks/analysis.ipynb` covers the qualitative, external-dataset, and quantitative analyses required by the assignment. Code lives in `src/analysis.py`; the notebook contains only markdown and thin calls into that module. Run `bash scripts/download_external.sh` once before opening the notebook to fetch the two external English clips (the two Russian FLEURS clips are bundled).
+`notebooks/analysis.ipynb` covers qualitative, external-dataset, and quantitative evaluation. Code lives in `src/analysis.py`; the notebook contains only markdown and thin calls into that module. Run `bash scripts/download_external.sh` once before opening the notebook to fetch the two external English clips (the two Russian FLEURS clips are bundled).
 
 ### Tests
 
